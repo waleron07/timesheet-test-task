@@ -1,7 +1,12 @@
+using FluentValidation;
+using MediatR;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Timesheet.Api;
+using Timesheet.Api.Behaviors;
+using Timesheet.Api.Features.TimeEntries;
 using Timesheet.Api.Infrastructure;
+using Timesheet.Api.Middleware;
 
 // Сериализаторы и конвенции регистрируются до создания клиента: драйвер
 // кэширует сериализаторы при первом обращении к типу, и поздняя регистрация
@@ -30,6 +35,14 @@ builder.Services.AddSingleton(sp =>
 
 builder.Services.AddSingleton<TimesheetCollections>();
 builder.Services.AddSingleton<DatabaseSeeder>();
+builder.Services.AddScoped<TimeEntryGuard>();
+
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(MongoOptions).Assembly));
+builder.Services.AddValidatorsFromAssembly(typeof(MongoOptions).Assembly);
+
+// Валидаторы прогоняются до обработчика: проверка формата отделена от
+// бизнес-правил, как требует ТЗ.
+builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -58,6 +71,9 @@ if (args.Contains("seed", StringComparer.OrdinalIgnoreCase))
 
 // Индексы создаются на старте, идемпотентно.
 await MongoIndexes.EnsureAsync(app.Services.GetRequiredService<TimesheetCollections>());
+
+// Middleware ошибок — первым в конвейере, чтобы поймать всё, что ниже.
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseSwagger();
 app.UseSwaggerUI();
