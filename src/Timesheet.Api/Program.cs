@@ -1,6 +1,12 @@
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Timesheet.Api;
+using Timesheet.Api.Infrastructure;
+
+// Сериализаторы и конвенции регистрируются до создания клиента: драйвер
+// кэширует сериализаторы при первом обращении к типу, и поздняя регистрация
+// молча не применится.
+MongoSetup.Register();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +28,9 @@ builder.Services.AddSingleton(sp =>
     return sp.GetRequiredService<IMongoClient>().GetDatabase(options.Database);
 });
 
+builder.Services.AddSingleton<TimesheetCollections>();
+builder.Services.AddSingleton<DatabaseSeeder>();
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -34,6 +43,21 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .AllowAnyMethod()));
 
 var app = builder.Build();
+
+// Режим наполнения базы: `dotnet Timesheet.Api.dll seed`.
+// Отдельной командой, а не автоматически при старте: сид сносящий, и запускать
+// его втихую при каждом рестарте контейнера означало бы терять данные.
+if (args.Contains("seed", StringComparer.OrdinalIgnoreCase))
+{
+    using var scope = app.Services.CreateScope();
+    var collections = scope.ServiceProvider.GetRequiredService<TimesheetCollections>();
+    await MongoIndexes.EnsureAsync(collections);
+    await scope.ServiceProvider.GetRequiredService<DatabaseSeeder>().SeedAsync();
+    return;
+}
+
+// Индексы создаются на старте, идемпотентно.
+await MongoIndexes.EnsureAsync(app.Services.GetRequiredService<TimesheetCollections>());
 
 app.UseSwagger();
 app.UseSwaggerUI();
