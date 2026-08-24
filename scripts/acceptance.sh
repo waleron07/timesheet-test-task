@@ -140,6 +140,39 @@ R=$(payload "$(api GET '/api/reports/projects?year=2026&month=3')")
 check "8. П-001 за март стал 8 000 ₽" "8000.0" "$(jq_get "['rows'][0]['amount']" <<<"$R")"
 
 echo
+echo "Дополнительно: границы правил, которые ТЗ не проверяет явно"
+reseed
+api POST '/api/periods/close' '{"year":2026,"month":2}' >/dev/null
+
+RESP=$(api PUT '/api/time-entries' \
+    '{"employeeId":"emp-ivanov","projectId":"prj-001","date":"2026-02-25","hours":8}')
+check "создание записи в закрытом периоде: 409" "409" "$(status "$RESP")"
+
+RESP=$(api DELETE '/api/time-entries/te-001')
+check "удаление записи из закрытого периода: 409" "409" "$(status "$RESP")"
+
+# Допущение 1.4 из NOTES.md: закрытый период неизменяем и «на вход», и «на выход».
+RESP=$(api POST '/api/time-entries/te-002' \
+    '{"employeeId":"emp-ivanov","projectId":"prj-001","date":"2026-02-10","hours":8,"version":1}')
+check "перенос записи в закрытый период: 409" "409" "$(status "$RESP")"
+
+api POST '/api/periods/open' '{"year":2026,"month":2}' >/dev/null
+api POST '/api/periods/close' '{"year":2026,"month":3}' >/dev/null
+RESP=$(api POST '/api/time-entries/te-002' \
+    '{"employeeId":"emp-ivanov","projectId":"prj-001","date":"2026-02-10","hours":8,"version":1}')
+check "перенос записи из закрытого периода: 409" "409" "$(status "$RESP")"
+api POST '/api/periods/open' '{"year":2026,"month":3}' >/dev/null
+
+# Границы включительные: 24 часа и последний день проекта допустимы.
+RESP=$(api PUT '/api/time-entries' \
+    '{"employeeId":"emp-ivanov","projectId":"prj-001","date":"2026-03-20","hours":24}')
+check "ровно 24 часа одной записью: 201" "201" "$(status "$RESP")"
+
+RESP=$(api PUT '/api/time-entries' \
+    '{"employeeId":"emp-petrova","projectId":"prj-001","date":"2026-03-31","hours":4}')
+check "запись в последний день проекта: 201" "201" "$(status "$RESP")"
+
+echo
 echo "Возврат базы в эталонное состояние..."
 reseed
 
