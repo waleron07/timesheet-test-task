@@ -1,40 +1,29 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { ProjectReportPage } from "./components/ProjectReportPage";
+import { TimeEntriesPage } from "./components/TimeEntriesPage";
 
-interface HealthResponse {
-    status: string;
-    mongo: string;
-}
+type Tab = "timesheet" | "report";
 
-/**
- * Этап 0: экран-заглушка, подтверждающая, что связка
- * фронт → прокси → API → Mongo поднимается целиком.
- * Экраны «Табель» и «Отчёт по проектам» появляются на этапе 5.
- */
 export const App = () => {
-    const [health, setHealth] = useState<HealthResponse | null>(null);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        const controller = new AbortController();
-        fetch("/api/health", { signal: controller.signal })
-            .then((r) => r.json() as Promise<HealthResponse>)
-            .then(setHealth)
-            .catch((e: Error) => {
-                if (e.name !== "AbortError") setError(e.message);
-            });
-        return () => controller.abort();
-    }, []);
+    const [tab, setTab] = useState<Tab>("timesheet");
 
     return (
-        <div style={{ fontFamily: "system-ui, sans-serif", padding: 24 }}>
+        <div className="app">
             <h1>Учёт трудозатрат</h1>
-            <p>Каркас поднят. Экраны появятся на этапе 5.</p>
-            {error && <p style={{ color: "#c00" }}>API недоступен: {error}</p>}
-            {health && (
-                <p>
-                    API: {health.status}, Mongo: {health.mongo}
-                </p>
-            )}
+
+            <nav className="tabs">
+                <button
+                    className={tab === "timesheet" ? "tab active" : "tab"}
+                    onClick={() => setTab("timesheet")}
+                >
+                    Табель
+                </button>
+                <button className={tab === "report" ? "tab active" : "tab"} onClick={() => setTab("report")}>
+                    Отчёт по проектам
+                </button>
+            </nav>
+
+            {tab === "timesheet" ? <TimeEntriesPage /> : <ProjectReportPage />}
         </div>
     );
 };
