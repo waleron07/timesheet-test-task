@@ -1,0 +1,48 @@
+services:
+
+  mongo:
+    image: mongo:7
+    container_name: timesheet-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # API стартует только после того, как Mongo реально отвечает на ping,
+      # иначе первое подключение падает на гонке при холодном старте.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: src/Timesheet.Api/Dockerfile
+    container_name: timesheet-api
+    ports:
+      - "8080:8080"
+    environment:
+      Mongo__ConnectionString: mongodb://mongo:27017
+      Mongo__Database: timesheet
+      ASPNETCORE_ENVIRONMENT: Development
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    container_name: timesheet-web
+    ports:
+      - "5173:5173"
+    environment:
+      # Внутри compose-сети фронт ходит в api по имени сервиса.
+      VITE_API_PROXY_TARGET: http://api:8080
+    depends_on:
+      - api
+
+volumes:
+  mongo-data:
