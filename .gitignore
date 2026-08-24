@@ -11,3 +11,4 @@ dist/
 .vscode/
 # OS
 .DS_Store
+*.tsbuildinfo
